@@ -33,7 +33,7 @@ public class PirtPlaceholderExpansion extends PlaceholderExpansion {
 
     @Override
     public @NotNull String getAuthor() {
-        return "DarkBlade";
+        return "DarkBladeDev";
     }
 
     @Override

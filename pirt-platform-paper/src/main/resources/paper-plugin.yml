@@ -2,7 +2,7 @@ name: PIRT
 version: "${version}"
 main: dev.darkblade.pirt.platform.paper.PirtPlugin
 api-version: "1.20"
-author: DarkBlade
+author: DarkBladeDev
 description: Players In Region Tracker - Decoupled high-performance region queries
 dependencies:
   server:
