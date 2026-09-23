@@ -1,0 +1,24 @@
+# PIRT (Players In Region Tracker) Configuration
+# High-performance decoupled region tracking and query engine
+
+tracking:
+  # How often (in server ticks) the RegionTracker updates player containment snapshots in memory.
+  # 5 ticks = 250ms (4 times per second). Extremely lightweight, ensures zero lag.
+  refresh-interval-ticks: 5
+
+formatting:
+  # Delimiter used when returning player collections (e.g. %pirt_spawn_players_names%)
+  list-delimiter: ", "
+  # Value returned when a query returns empty (e.g. no players or null)
+  empty-value: ""
+  # Whether to show errors in placeholder output if a region is invalid or query syntax is wrong
+  display-errors: false
+
+# Explicitly configured regions to track even when empty
+regions:
+  spawn:
+    world: world
+    id: spawn
+  arena:
+    world: world
+    id: arena
