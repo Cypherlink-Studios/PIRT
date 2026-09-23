@@ -5,7 +5,7 @@ plugins {
 
 allprojects {
     group = "dev.darkblade.pirt"
-    version = "1.1.0-SNAPSHOT"
+    version = "1.2.0-SNAPSHOT"
 
     repositories {
         mavenCentral()

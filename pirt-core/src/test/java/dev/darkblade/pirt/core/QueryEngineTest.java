@@ -50,10 +50,12 @@ class QueryEngineTest {
         FakePlayer alex = new FakePlayer(UUID.randomUUID(), "Alex", 20.0, 30);
         FakePlayer steve = new FakePlayer(UUID.randomUUID(), "Steve", 14.0, 10);
         FakePlayer herobrine = new FakePlayer(UUID.randomUUID(), "Herobrine", 100.0, 999);
+        FakePlayer darkBlade = new FakePlayer(UUID.randomUUID(), "Dark_Blade", 25.0, 50);
 
         players.put(alex.id(), alex);
         players.put(steve.id(), steve);
         players.put(herobrine.id(), herobrine);
+        players.put(darkBlade.id(), darkBlade);
 
         // Region "world:spawn" has Alex and Steve
         RegionReference spawn = RegionReference.of("world", "spawn");
@@ -62,6 +64,22 @@ class QueryEngineTest {
         // Region "world:boss" has Herobrine
         RegionReference boss = RegionReference.of("world", "boss");
         regionMembers.put(boss, Set.of(herobrine.id()));
+
+        // Region "world:test_region" (underscore) has Alex and Steve
+        RegionReference testRegion = RegionReference.of("world", "test_region");
+        regionMembers.put(testRegion, Set.of(alex.id(), steve.id()));
+
+        // Region "world:testing-zone" (hyphen) has Herobrine and Dark_Blade
+        RegionReference testingZone = RegionReference.of("world", "testing-zone");
+        regionMembers.put(testingZone, Set.of(herobrine.id(), darkBlade.id()));
+
+        // Region "world:test_region-1" (mixed) has Alex
+        RegionReference mixed = RegionReference.of("world", "test_region-1");
+        regionMembers.put(mixed, Set.of(alex.id()));
+
+        // Region "world_nether:test_region" (world with underscore) has Dark_Blade
+        RegionReference netherRegion = RegionReference.of("world_nether", "test_region");
+        regionMembers.put(netherRegion, Set.of(darkBlade.id()));
 
         // Region context factory mock
         RegionContextFactory factory = region -> {
@@ -153,5 +171,134 @@ class QueryEngineTest {
 
         QueryResult countResult = engine.execute("world", "unknown_players_count");
         assertThat(countResult.isError()).isTrue();
+    }
+
+    @Test
+    void testMultiWordRegionWithUnderscore() {
+        // Query players count
+        QueryResult countResult = engine.execute("world", "test_region_players_count");
+        assertThat(countResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) countResult).value()).isEqualTo(2);
+
+        // Alias count
+        QueryResult aliasCount = engine.execute("world", "test_region_count");
+        assertThat(aliasCount).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) aliasCount).value()).isEqualTo(2);
+
+        // No operation specified (defaults to players count)
+        QueryResult noOp = engine.execute("world", "test_region");
+        assertThat(noOp).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) noOp).value()).isEqualTo(2);
+
+        // Players names
+        QueryResult namesResult = engine.execute("world", "test_region_players_names");
+        assertThat(namesResult).isInstanceOf(QueryResult.CollectionResult.class);
+        QueryResult.CollectionResult<?> col = (QueryResult.CollectionResult<?>) namesResult;
+        assertThat(col.items()).map(Object::toString).containsExactly("Alex", "Steve");
+
+        // Region exists
+        QueryResult existsResult = engine.execute("world", "test_region_exists");
+        assertThat(existsResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) existsResult).value()).isEqualTo(true);
+
+        // Players contains
+        QueryResult containsResult = engine.execute("world", "test_region_players_contains_Alex");
+        assertThat(containsResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) containsResult).value()).isEqualTo(true);
+
+        // Specific player data
+        QueryResult playerData = engine.execute("world", "test_region_player_Alex_health");
+        assertThat(playerData).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) playerData).value()).isEqualTo(20.0);
+    }
+
+    @Test
+    void testMultiWordRegionWithHyphen() {
+        // Standard snake_case query on hyphenated region
+        QueryResult count1 = engine.execute("world", "testing-zone_players_count");
+        assertThat(count1).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count1).value()).isEqualTo(2);
+
+        // Kebab-case query on hyphenated region
+        QueryResult count2 = engine.execute("world", "testing-zone-players-count");
+        assertThat(count2).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count2).value()).isEqualTo(2);
+
+        // Short aliases
+        QueryResult count3 = engine.execute("world", "testing-zone_count");
+        assertThat(count3).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count3).value()).isEqualTo(2);
+
+        QueryResult count4 = engine.execute("world", "testing-zone-count");
+        assertThat(count4).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count4).value()).isEqualTo(2);
+
+        // No operation (defaults to count)
+        QueryResult noOp = engine.execute("world", "testing-zone");
+        assertThat(noOp).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) noOp).value()).isEqualTo(2);
+
+        // Region exists
+        QueryResult exists1 = engine.execute("world", "testing-zone_exists");
+        assertThat(exists1).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) exists1).value()).isEqualTo(true);
+
+        QueryResult exists2 = engine.execute("world", "testing-zone-exists");
+        assertThat(exists2).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) exists2).value()).isEqualTo(true);
+
+        // Names
+        QueryResult namesResult = engine.execute("world", "testing-zone_players_names");
+        assertThat(namesResult).isInstanceOf(QueryResult.CollectionResult.class);
+        QueryResult.CollectionResult<?> col = (QueryResult.CollectionResult<?>) namesResult;
+        assertThat(col.items()).map(Object::toString).containsExactly("Dark_Blade", "Herobrine");
+    }
+
+    @Test
+    void testMixedUnderscoreAndHyphenRegion() {
+        QueryResult countResult = engine.execute("world", "test_region-1_players_count");
+        assertThat(countResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) countResult).value()).isEqualTo(1);
+
+        QueryResult noOp = engine.execute("world", "test_region-1");
+        assertThat(noOp).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) noOp).value()).isEqualTo(1);
+    }
+
+    @Test
+    void testPlayerWithUnderscoresInUsername() {
+        QueryResult healthResult = engine.execute("world", "testing-zone_player_Dark_Blade_health");
+        assertThat(healthResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) healthResult).value()).isEqualTo(25.0);
+
+        QueryResult levelResult = engine.execute("world", "testing-zone_player_Dark_Blade_level");
+        assertThat(levelResult).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) levelResult).value()).isEqualTo(50);
+    }
+
+    @Test
+    void testWorldWithUnderscore() {
+        QueryResult netherCount = engine.execute("world", "world_nether:test_region_players_count");
+        assertThat(netherCount).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) netherCount).value()).isEqualTo(1);
+
+        QueryResult netherNoOp = engine.execute("world", "world_nether:test_region");
+        assertThat(netherNoOp).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) netherNoOp).value()).isEqualTo(1);
+    }
+
+    @Test
+    void testRegionPrefix() {
+        QueryResult count1 = engine.execute("world", "region_test_region_players_count");
+        assertThat(count1).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count1).value()).isEqualTo(2);
+
+        QueryResult count2 = engine.execute("world", "region_testing-zone");
+        assertThat(count2).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count2).value()).isEqualTo(2);
+
+        QueryResult count3 = engine.execute("world", "region_test_region");
+        assertThat(count3).isInstanceOf(QueryResult.ValueResult.class);
+        assertThat(((QueryResult.ValueResult<?>) count3).value()).isEqualTo(2);
     }
 }

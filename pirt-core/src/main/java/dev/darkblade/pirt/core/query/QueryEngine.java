@@ -45,7 +45,12 @@ public interface QueryEngine {
             PlayerDataRegistry playerDataRegistry,
             RegionQueryRegistry regionQueryRegistry
     ) {
-        return new DefaultQueryEngine(contextFactory, playerDataRegistry, regionQueryRegistry, new QueryParser());
+        return new DefaultQueryEngine(
+                contextFactory,
+                playerDataRegistry,
+                regionQueryRegistry,
+                new QueryParser(ref -> contextFactory.create(ref).map(RegionContext::exists).orElse(false))
+        );
     }
 }
 
@@ -70,7 +75,11 @@ class DefaultQueryEngine implements QueryEngine {
 
     @Override
     public QueryResult execute(String defaultWorld, String rawQuery) {
-        Optional<Query> parsed = parser.parse(defaultWorld, rawQuery);
+        Optional<Query> parsed = parser.parse(
+                defaultWorld,
+                rawQuery,
+                ref -> contextFactory.create(ref).map(RegionContext::exists).orElse(false)
+        );
         if (parsed.isEmpty()) {
             return QueryResult.ErrorResult.of("Invalid query syntax: " + rawQuery);
         }
