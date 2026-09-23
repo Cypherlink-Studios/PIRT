@@ -7,6 +7,9 @@ dependencies {
     implementation(project(":pirt-core"))
     implementation(project(":pirt-integration-worldguard"))
     implementation(project(":pirt-integration-placeholderapi"))
+    implementation("org.incendo:cloud-paper:2.0.0")
+    implementation("org.incendo:cloud-annotations:2.0.0")
+    annotationProcessor("org.incendo:cloud-annotations:2.0.0")
 
     compileOnly("io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT")
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.9")
@@ -22,6 +25,9 @@ tasks {
     shadowJar {
         archiveClassifier.set("")
         archiveFileName.set("PIRT-${project.version}.jar")
+
+        relocate("org.incendo.cloud", "dev.darkblade.pirt.libs.cloud")
+        relocate("io.leangen.geantyref", "dev.darkblade.pirt.libs.geantyref")
     }
 
     build {
@@ -32,7 +38,7 @@ tasks {
         val props = mapOf("version" to project.version)
         inputs.properties(props)
         filteringCharset = "UTF-8"
-        filesMatching("paper-plugin.yml") {
+        filesMatching(listOf("paper-plugin.yml", "plugin.yml")) {
             expand(props)
         }
     }

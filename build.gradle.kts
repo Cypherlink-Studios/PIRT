@@ -1,11 +1,11 @@
 plugins {
     id("java")
-    id("com.gradleup.shadow") version "8.3.6" apply false
+    id("com.gradleup.shadow") version "8.3.11" apply false
 }
 
 allprojects {
     group = "dev.darkblade.pirt"
-    version = "1.0.0-SNAPSHOT"
+    version = "1.1.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
@@ -28,6 +28,7 @@ subprojects {
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
         options.release.set(21)
+        options.compilerArgs.add("-parameters")
     }
 
     tasks.withType<Test> {

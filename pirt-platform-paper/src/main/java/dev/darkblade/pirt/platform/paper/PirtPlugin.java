@@ -1,7 +1,6 @@
 package dev.darkblade.pirt.platform.paper;
 
 import dev.darkblade.pirt.core.query.QueryEngine;
-import dev.darkblade.pirt.core.query.QueryResult;
 import dev.darkblade.pirt.core.region.RegionContextFactory;
 import dev.darkblade.pirt.core.region.RegionReference;
 import dev.darkblade.pirt.core.registry.PlayerDataRegistry;
@@ -10,29 +9,28 @@ import dev.darkblade.pirt.integration.papi.PirtPlaceholderExpansion;
 import dev.darkblade.pirt.integration.papi.QueryResultFormatter;
 import dev.darkblade.pirt.integration.worldguard.WorldGuardRegionContextFactory;
 import dev.darkblade.pirt.integration.worldguard.WorldGuardRegionTracker;
+import dev.darkblade.pirt.platform.paper.command.PirtCommand;
 import dev.darkblade.pirt.platform.paper.player.PaperPlayerLookup;
 import dev.darkblade.pirt.platform.paper.provider.PaperPlayerDataProviders;
 import org.bukkit.Bukkit;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.incendo.cloud.annotations.AnnotationParser;
+import org.incendo.cloud.bukkit.CloudBukkitCapabilities;
+import org.incendo.cloud.execution.ExecutionCoordinator;
+import org.incendo.cloud.paper.LegacyPaperCommandManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.logging.Level;
 
-public final class PirtPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
+public final class PirtPlugin extends JavaPlugin implements Listener {
 
     private PlayerDataRegistry playerDataRegistry;
     private RegionQueryRegistry regionQueryRegistry;
@@ -42,6 +40,7 @@ public final class PirtPlugin extends JavaPlugin implements CommandExecutor, Tab
     private QueryEngine queryEngine;
     private QueryResultFormatter formatter;
     private BukkitTask trackingTask;
+    private LegacyPaperCommandManager<CommandSender> commandManager;
 
     @Override
     public void onEnable() {
@@ -78,11 +77,23 @@ public final class PirtPlugin extends JavaPlugin implements CommandExecutor, Tab
         }
 
         // 6. Register Commands and Listeners
-        var cmd = getCommand("pirt");
-        if (cmd != null) {
-            cmd.setExecutor(this);
-            cmd.setTabCompleter(this);
+        final ExecutionCoordinator<CommandSender> coordinator = ExecutionCoordinator.simpleCoordinator();
+        commandManager = LegacyPaperCommandManager.createNative(
+                this,
+                coordinator
+        );
+        if (commandManager.hasCapability(CloudBukkitCapabilities.NATIVE_BRIGADIER)) {
+            commandManager.registerBrigadier();
+        } else if (commandManager.hasCapability(CloudBukkitCapabilities.ASYNCHRONOUS_COMPLETION)) {
+            commandManager.registerAsynchronousCompletions();
         }
+
+        final AnnotationParser<CommandSender> annotationParser = new AnnotationParser<>(
+                commandManager,
+                CommandSender.class
+        );
+        annotationParser.parse(new PirtCommand(this));
+
         Bukkit.getPluginManager().registerEvents(this, this);
 
         getLogger().info("PIRT v" + getPluginMeta().getVersion() + " successfully enabled!");
@@ -139,83 +150,16 @@ public final class PirtPlugin extends JavaPlugin implements CommandExecutor, Tab
         }
     }
 
-    @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            sender.sendMessage("§e--- §6PIRT (Players In Region Tracker) §e---");
-            sender.sendMessage("§6/pirt query <query> §7- Execute a query, e.g. 'spawn_players_count'");
-            sender.sendMessage("§6/pirt list §7- List tracked regions");
-            sender.sendMessage("§6/pirt reload §7- Reload configuration");
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("reload")) {
-            if (!sender.hasPermission("pirt.admin")) {
-                sender.sendMessage("§cYou don't have permission to execute this command.");
-                return true;
-            }
-            loadPluginConfiguration();
-            sender.sendMessage("§aPIRT configuration reloaded.");
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("list")) {
-            if (!sender.hasPermission("pirt.admin")) {
-                sender.sendMessage("§cYou don't have permission to execute this command.");
-                return true;
-            }
-            if (regionTracker == null) {
-                sender.sendMessage("§cRegionTracker is not active (WorldGuard missing).");
-                return true;
-            }
-            sender.sendMessage("§eTracked regions (" + regionTracker.trackedRegions().size() + "):");
-            for (RegionReference ref : regionTracker.trackedRegions()) {
-                int count = regionTracker.snapshot(ref).playerCount();
-                sender.sendMessage(" §7- §f" + ref + " §7(Players: §a" + count + "§7)");
-            }
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("query")) {
-            if (!sender.hasPermission("pirt.admin")) {
-                sender.sendMessage("§cYou don't have permission to execute this command.");
-                return true;
-            }
-            if (args.length < 2) {
-                sender.sendMessage("§cUsage: /pirt query <rawQuery> (e.g. spawn_players_count)");
-                return true;
-            }
-            String rawQuery = args[1];
-            String defaultWorld = sender instanceof Player p ? p.getWorld().getName() : "world";
-            QueryResult result = queryEngine.execute(defaultWorld, rawQuery);
-            sender.sendMessage("§6[PIRT] §fQuery: §e" + rawQuery + " §7=> §a" + formatter.format(result));
-            return true;
-        }
-
-        sender.sendMessage("§cUnknown subcommand. Use /pirt help");
-        return true;
+    public @Nullable WorldGuardRegionTracker getRegionTracker() {
+        return regionTracker;
     }
 
-    @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        if (args.length == 1) {
-            return List.of("query", "list", "reload", "help").stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .toList();
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("query")) {
-            List<String> suggestions = new ArrayList<>();
-            if (regionTracker != null) {
-                for (RegionReference ref : regionTracker.trackedRegions()) {
-                    suggestions.add(ref.id() + "_players_count");
-                    suggestions.add(ref.id() + "_players_names");
-                }
-            }
-            return suggestions.stream()
-                    .filter(s -> s.startsWith(args[1].toLowerCase()))
-                    .toList();
-        }
-        return List.of();
+    public QueryResultFormatter getFormatter() {
+        return formatter;
+    }
+
+    public LegacyPaperCommandManager<CommandSender> getCommandManager() {
+        return commandManager;
     }
 
     public QueryEngine getQueryEngine() {
